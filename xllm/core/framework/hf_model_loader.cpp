@@ -62,7 +62,6 @@ std::unique_ptr<Tokenizer> HFModelLoader::tokenizer() const {
 std::vector<std::unique_ptr<StateDict>>& HFModelLoader::get_state_dicts() {
   if (state_dicts_.empty()) {
     // load state dict
-    state_dicts_.reserve(model_weights_files_.size());
     auto file_cnt = model_weights_files_.size();
     BlockingCounter counter(file_cnt);
     state_dicts_.resize(model_weights_files_.size());
