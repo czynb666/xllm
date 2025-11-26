@@ -25,6 +25,7 @@ limitations under the License.
 #include <torch_npu/csrc/libs/init_npu.h>
 
 #include <functional>
+#include <memory>
 
 #include "atb/atb_infer.h"
 #include "framework/kv_cache/kv_cache.h"
@@ -42,6 +43,8 @@ limitations under the License.
 
 namespace xllm {
 namespace layer {
+
+class LlamaLoader;
 
 class NpuLlamaDecoderLayerImpl : public NpuBaseLayer {
  public:

@@ -17,16 +17,16 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "loader/block_copy_loader.h"
+
 namespace xllm {
 namespace layer {
 
 NpuBlockCopyImpl::NpuBlockCopyImpl(const ModelContext& context)
     : NpuBaseLayer(context) {
   auto options = context.get_tensor_options();
-  dtype_ = c10::typeMetaToScalarType(options.dtype());
+  loader_ = std::make_unique<BlockCopyLoader>(0, parallel_args_);
 }
-
-void NpuBlockCopyImpl::merge_loaded_weights() { init_layer(); }
 
 int64_t NpuBlockCopyImpl::init_layer() {
   NpuBaseLayer::name_ = "block_copy_layer";

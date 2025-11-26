@@ -46,7 +46,6 @@ NpuColumnParallelLinearImpl::NpuColumnParallelLinearImpl(
     : NpuBaseLayer(context) {
   param_from_args(
       linear_param_, context.get_model_args(), context.get_parallel_args());
-  at_weight_tensors_.resize(1);
   atb_weight_tensors_.resize(1);
   at_out_tensors_.resize(1);
 
@@ -55,28 +54,15 @@ NpuColumnParallelLinearImpl::NpuColumnParallelLinearImpl(
   at_weight_tensors_[0] = torch::zeros({1}).to(options);
   tensor_placeholder_ = torch::zeros({1}).to(options);
   placeholder_ = atb_speed::Utils::AtTensor2Tensor(tensor_placeholder_);
-}
-
-void NpuColumnParallelLinearImpl::verify_loaded_weights(
-    const std::string weight_str) const {
-  CHECK(at_weight_tensors_[0].sizes() != std::vector<int64_t>({1}))
-      << "weight is not loaded for " << weight_str;
+  loader_ = std::make_unique<ColumnParallelLinearLoader>(
+      1, context.get_parallel_args(), dtype_, options);
 }
 
 void NpuColumnParallelLinearImpl::merge_loaded_weights() {
+  loader_->merge_loaded_weights();
   atb_weight_tensors_[0] =
-      atb_speed::Utils::AtTensor2Tensor(at_weight_tensors_[0]);
+      atb_speed::Utils::AtTensor2Tensor(loader_->at_weight_tensors_[0]);
   init_layer();
-}
-
-void NpuColumnParallelLinearImpl::load_state_dict(const StateDict& state_dict) {
-  if (dp_size_ > 1) {
-    set_weight(
-        state_dict, "weight", 0, 0, dp_local_tp_rank_, dp_local_tp_size_);
-  } else {
-    set_weight(state_dict, "weight", 0, 0);
-  }
-  at_weight_tensors_[0] = at_weight_tensors_[0].to(dtype_);
 }
 
 int64_t NpuColumnParallelLinearImpl::init_layer() {

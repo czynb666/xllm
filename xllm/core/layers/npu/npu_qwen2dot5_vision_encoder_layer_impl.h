@@ -97,36 +97,12 @@ class NpuQwen2dot5VisionEncoderLayerImpl : public NpuBaseLayer {
                                ModelInputParams& input_params,
                                bool is_prefill);
 
-  void get_weights_col_packed_qkv();
-
   void param_from_args(atb_speed::qwen::VisionEncoderLayerParam& param,
                        const ModelArgs& args,
                        const ParallelArgs& parallel_args);
 
   int64_t init_node(atb_speed::Model::Node& node,
                     atb_speed::qwen::VisionEncoderLayerParam& param);
-
-  void pad_qkv_weights();
-
-  void pad_mlp_weights();
-
-  torch::Tensor pad_tensor(const torch::Tensor& tensor,
-                           int64_t target_shape,
-                           int64_t dim = 0) {
-    int64_t pad_size = target_shape - tensor.size(dim);
-    if (tensor.dim() == 1) {
-      return torch::nn::functional::pad(
-          tensor, torch::nn::functional::PadFuncOptions({0, pad_size}));
-    } else if (tensor.dim() == 2) {
-      if (1 == dim)
-        return torch::nn::functional::pad(
-            tensor, torch::nn::functional::PadFuncOptions({0, pad_size, 0, 0}));
-      else
-        return torch::nn::functional::pad(
-            tensor, torch::nn::functional::PadFuncOptions({0, 0, 0, pad_size}));
-    }
-    return tensor;
-  }
 
   atb_speed::Model::Node encode_node_;
   std::string model_name_;
