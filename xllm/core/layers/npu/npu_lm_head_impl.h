@@ -29,6 +29,7 @@ limitations under the License.
 #include "atb/atb_infer.h"
 #include "framework/model/model_input_params.h"
 #include "framework/model_context.h"
+#include "loader/lm_head_loader.h"
 #include "nlohmann/json.hpp"
 #include "npu_base_layer.h"
 #include "pytorch/adapter/utils/utils.h"
@@ -90,6 +91,8 @@ class NpuLmHeadImpl : public NpuBaseLayer {
   std::vector<std::shared_ptr<at::Tensor>> decode_tensor_storage_;
   atb::Tensor hidden_states_atb_;
   atb::Tensor seleted_idxes_atb_;
+
+  std::unique_ptr<LmHeadLoader> lm_head_loader_ = nullptr;
 };
 
 }  // namespace layer

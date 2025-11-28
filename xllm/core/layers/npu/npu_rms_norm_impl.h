@@ -31,6 +31,7 @@ limitations under the License.
 #include "framework/model/model_input_params.h"
 #include "framework/model_context.h"
 #include "framework/state_dict/state_dict.h"
+#include "loader/rms_norm_loader.h"
 #include "nlohmann/json.hpp"
 #include "npu_base_layer.h"
 #include "pytorch/adapter/utils/utils.h"
@@ -70,6 +71,8 @@ class NpuRmsNormImpl : public NpuBaseLayer {
   std::string model_name_;
   atb::infer::RmsNormParam norm_param_;
   atb::Tensor internal_tensors_;
+
+  std::unique_ptr<>
 };
 
 }  // namespace layer

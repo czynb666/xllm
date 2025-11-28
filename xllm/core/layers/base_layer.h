@@ -27,6 +27,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "base_loader.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
 #include "framework/model_context.h"
@@ -92,40 +93,26 @@ class BaseLayer : public torch::nn::Module {
 
   virtual ~BaseLayer() {};
 
-  virtual void load_state_dict(const StateDict& state_dict) {};
+  virtual void load_state_dict(const StateDict& state_dict) {
+    loader_->load_state_dict(state_dict);
+  };
 
-  virtual void verify_loaded_weights() const {};
+  virtual void verify_loaded_weights() const {
+    loader_->verify_loaded_weights();
+  };
 
-  virtual void merge_loaded_weights() {};
+  virtual void merge_loaded_weights() {
+    loader_->merge_loaded_weights();
+    init_layer();
+  };
 
   virtual int64_t init_layer() { return 0; };
-
-  void set_weight(const StateDict& state_dict,
-                  const std::string& tensor_name,
-                  int weight_position,
-                  int dim);
-
-  void set_weight(const StateDict& state_dict,
-                  const std::string& tensor_name,
-                  int weight_position);
-
-  void set_weight(const StateDict& state_dict,
-                  const std::string& tensor_name,
-                  int weight_position,
-                  int dim,
-                  int rank,
-                  int world_size);
 
   virtual void run_task(std::string taskName, std::function<int()> task) const {
   };
 
-  torch::Dtype string2dtype(const std::string& dtype_str);
-
-  void correct_tensor_dtype(torch::Tensor& tensor,
-                            const std::string& tensorName);
-
  protected:
-  std::vector<at::Tensor> at_weight_tensors_;
+  std::unique_ptr<BaseLoader> loader_ = nullptr;
   at::Device device_;
   std::string name_;
   torch::ScalarType dtype_;

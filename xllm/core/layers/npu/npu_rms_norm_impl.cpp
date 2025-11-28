@@ -36,11 +36,7 @@ NpuRmsNormImpl::NpuRmsNormImpl(const ModelContext& context)
   auto options = context.get_tensor_options();
   dtype_ = c10::typeMetaToScalarType(options.dtype());
   at_weight_tensors_[0] = torch::zeros({1}).to(options);
-}
-
-void NpuRmsNormImpl::verify_loaded_weights(const std::string weight_str) const {
-  CHECK(at_weight_tensors_[0].sizes() != std::vector<int64_t>({1}))
-      << "final norm weight is not loaded for " << weight_str;
+  l
 }
 
 void NpuRmsNormImpl::merge_loaded_weights() {

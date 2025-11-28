@@ -25,6 +25,7 @@ limitations under the License.
 #include <torch_npu/csrc/libs/init_npu.h>
 
 #include <functional>
+#include <memory>
 
 #include "atb/atb_infer.h"
 #include "framework/model/model_input_params.h"
@@ -39,15 +40,17 @@ limitations under the License.
 namespace xllm {
 namespace layer {
 
+class BlockCopyLoader;
+
 class NpuBlockCopyImpl : public NpuBaseLayer {
  public:
   explicit NpuBlockCopyImpl(const ModelContext& context);
 
   ~NpuBlockCopyImpl() {};
 
-  void load_state_dict(const StateDict& state_dict) {};
+  void load_state_dict(const StateDict& state_dict);
 
-  void verify_loaded_weights(const std::string weight_str) const {};
+  void verify_loaded_weights(const std::string& weight_str) const;
 
   void merge_loaded_weights();
 
@@ -79,6 +82,8 @@ class NpuBlockCopyImpl : public NpuBaseLayer {
   atb::Tensor internal_src_block_ids_tensors_;
   atb::Tensor internal_dst_block_ids_tensors_;
   atb::Tensor internal_cum_sum_tensors_;
+
+  std::unique_ptr<BlockCopyLoader> loader_;
 };
 
 }  // namespace layer

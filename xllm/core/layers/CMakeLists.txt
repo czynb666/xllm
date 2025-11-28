@@ -37,9 +37,11 @@ cc_library(
   HDRS
     attention_mask.h
     base_layer.h
+    base_loader.h
   SRCS
     attention_mask.cpp
     base_layer.cpp
+    base_loader.cpp
   DEPS
     :state_dict
     :block

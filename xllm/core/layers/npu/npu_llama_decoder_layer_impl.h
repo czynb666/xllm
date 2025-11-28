@@ -25,6 +25,7 @@ limitations under the License.
 #include <torch_npu/csrc/libs/init_npu.h>
 
 #include <functional>
+#include <memory>
 
 #include "atb/atb_infer.h"
 #include "framework/kv_cache/kv_cache.h"
@@ -42,6 +43,8 @@ limitations under the License.
 
 namespace xllm {
 namespace layer {
+
+class LlamaLoader;
 
 class NpuLlamaDecoderLayerImpl : public NpuBaseLayer {
  public:
@@ -99,6 +102,62 @@ class NpuLlamaDecoderLayerImpl : public NpuBaseLayer {
   at::Tensor at_placeholder_;
 
   int device_id_;
+
+  enum TensorId : int {
+    IN_NORM_WEIGHT = 0,
+    IN_NORM_BIAS,
+    IN_NORM_NEW_WEIGHT,
+    IN_NORM_NEW_BIAS,
+    IN_Q_WEIGHT,
+    IN_Q_BIAS,
+    IN_Q_DEQSCALE,
+    IN_Q_OFFSET,
+    IN_Q_SCALE,
+    IN_Q_COMPRESS_IDX,
+    IN_K_WEIGHT,
+    IN_K_BIAS,
+    IN_K_DEQSCALE,
+    IN_K_OFFSET,
+    IN_K_SCALE,
+    IN_K_COMPRESS_IDX,
+    IN_V_WEIGHT,
+    IN_V_BIAS,
+    IN_V_DEQSCALE,
+    IN_V_OFFSET,
+    IN_V_SCALE,
+    IN_V_COMPRESS_IDX,
+    IN_ATTENTION_OUT_WEIGHT,
+    IN_ATTENTION_OUT_BIAS,
+    IN_ATTENTION_OUT_DEQSCALE,
+    IN_ATTENTION_OUT_OFFSET,
+    IN_ATTENTION_OUT_SCALE,
+    IN_ATTENTION_OUT_COMPRESS_IDX,
+    IN_SELFOUT_NORM_WEIGHT,
+    IN_SELFOUT_NORM_BIAS,
+    IN_SELFOUT_NORM_NEW_WEIGHT,
+    IN_SELFOUT_NORM_NEW_BIAS,
+    IN_MLP_W2_WEIGHT,
+    IN_MLP_W2_BIAS,
+    IN_MLP_W2_DEQSCALE,
+    IN_MLP_W2_OFFSET,
+    IN_MLP_W2_SCALE,
+    IN_MLP_W2_COMPRESS_IDX,
+    IN_MLP_W1_WEIGHT,
+    IN_MLP_W1_BIAS,
+    IN_MLP_W1_DEQSCALE,
+    IN_MLP_W1_OFFSET,
+    IN_MLP_W1_SCALE,
+    IN_MLP_W1_COMPRESS_IDX,
+    IN_MLP_CPROJ_WEIGHT,
+    IN_MLP_CPROJ_BIAS,
+    IN_MLP_CPROJ_DEQSCALE,
+    IN_MLP_CPROJ_OFFSET,
+    IN_MLP_CPROJ_SCALE,
+    IN_MLP_CPROJ_COMPRESS_IDX
+  };
+
+  friend class LlamaLoader;
+  std::unique_ptr<LlamaLoader> loader_;
 };
 
 }  // namespace layer

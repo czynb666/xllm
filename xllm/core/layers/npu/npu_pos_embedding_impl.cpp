@@ -59,8 +59,6 @@ int64_t NpuRotaryEmbeddingImpl::init_node(atb_speed::Model::Node& node) {
   node.inTensors.resize(node.operation->GetInputNum());
   node.outTensors.resize(node.operation->GetOutputNum());
 
-  // node.inTensors.at(0) = &atb_weight_tensors_[0];
-
   node.variantPack.inTensors.reserve(node.inTensors.size());
   node.variantPack.inTensors.resize(node.inTensors.size());
   node.variantPack.outTensors.reserve(node.outTensors.size());

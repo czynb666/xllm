@@ -73,6 +73,7 @@ class NpuWordEmbeddingImpl : public NpuBaseLayer {
   // std::string name_;
   atb_speed::common::WordEmbeddingParam embedding_param_;
   atb::Tensor internalTensors;
+  std::unique_ptr<WordEmbeddingLoader> loader_
 };
 
 }  // namespace layer
