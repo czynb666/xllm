@@ -169,7 +169,7 @@ NpuDeepseekV2DecoderLayerImpl::NpuDeepseekV2DecoderLayerImpl(
   param_from_args(decode_mla_param_, model_args, parallel_args, false);
   decode_mla_param_.enableCustomizeMla = FLAGS_enable_customize_mla_kernel;
 
-  loader_ = std::make_unique<DeekseekV2DecoderLoader>(
+  loader_ = std::make_unique<DeekseekV2DecoderManualLoader>(
       WEIGHT_COUNT_PER_LAYER,
       context,
       layer_id_,

@@ -96,21 +96,22 @@ NpuQwen2DecoderLayerImpl::NpuQwen2DecoderLayerImpl(const ModelContext& context)
   placeholder_ = atb_speed::Utils::AtTensor2Tensor(
       torch::zeros({1}).to(device_).to(dtype_));
   at_placeholder_ = torch::zeros({1}).to(device_).to(dtype_);
-  loader_ =
-      std::make_unique<Qwen2DecoderLoader>(WEIGHT_COUNT_PER_LAYER, context);
+  loader_ = std::make_unique<Qwen2DecoderManualLoader>(WEIGHT_COUNT_PER_LAYER,
+                                                       context);
   initialize_quantization_parameters();
 }
 
 void NpuQwen2DecoderLayerImpl::initialize_linear_transpose_type() {
-  auto& at_weight_tensors = loader_->get_at_weight_tensors();
+  auto& at_host_weight_tensors = loader_->get_at_host_weight_tensors();
   TransposeType transpose_type =
-      check_transpose(at_weight_tensors[IN_MLP_W2_WEIGHT]);
+      check_transpose(at_host_weight_tensors[IN_MLP_W2_WEIGHT]);
   int transpose_value = static_cast<int>(transpose_type);
   prefill_param_.linearTransposeType[4] = transpose_value;
   decode_param_.linearTransposeType[4] = transpose_value;
 }
 
 void NpuQwen2DecoderLayerImpl::merge_loaded_weights() {
+  LOG(INFO) << "fwafwfa11111wangyi";
   initialize_linear_transpose_type();
   loader_->merge_loaded_weights();
   auto& at_weight_tensors = loader_->get_at_weight_tensors();
