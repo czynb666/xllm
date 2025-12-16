@@ -48,7 +48,7 @@ LLMMaster::LLMMaster(const Options& options)
              options.draft_model_path().value_or("").empty()
                  ? EngineType::LLM
                  : EngineType::SSM) {
-  CHECK(engine_->init());
+  CHECK(engine_->init(options_.sleep_mode()));
   task_type_ = options_.task_type();
 
   model_args_ = engine_->model_args();
@@ -475,6 +475,10 @@ bool LLMMaster::unlink_cluster(const std::vector<uint64_t>& cluster_ids,
       cluster_ids, addrs, device_ips, ports, dp_size);
 }
 
+bool LLMMaster::sleep() { return engine_->sleep(master_status_); }
+
+bool LLMMaster::wakeup() { return engine_->wakeup(master_status_); }
+
 LLMAssistantMaster::LLMAssistantMaster(const Options& options)
     : Master(options,
              options.draft_model_path().value_or("").empty()
@@ -497,7 +501,7 @@ void LLMAssistantMaster::run() {
   signal(SIGTERM, LLMAssistantMaster::handle_signal);
 
   while (running_) {
-    sleep(5);
+    std::this_thread::sleep_for(std::chrono::seconds(5));
   }
 }
 

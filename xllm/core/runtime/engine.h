@@ -30,7 +30,9 @@ class Engine {
  public:
   virtual ~Engine() = default;
 
-  virtual bool init() = 0;
+  virtual bool init() {};
+
+  virtual bool init(bool sleep_mode) {};
 
   // execute model with batch input
   virtual ForwardOutput step(std::vector<Batch>& batch) = 0;
@@ -128,6 +130,16 @@ class Engine {
                               const std::vector<uint16_t>& ports,
                               const int32_t dp_size) {
     LOG(FATAL) << " unlink_cluster is notimplemented!";
+  };
+
+  virtual bool sleep(int32_t master_status) {
+    LOG(FATAL) << " sleep is not implemented!";
+    return false;
+  };
+
+  virtual bool wakeup(int32_t master_status) {
+    LOG(FATAL) << " wakeup is not implemented!";
+    return false;
   };
 
   struct KVCacheCapacity {

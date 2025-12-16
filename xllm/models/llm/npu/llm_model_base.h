@@ -96,6 +96,10 @@ class LlmDecoderLayerImplBase : public torch::nn::Module {
     block_copy_->merge_loaded_weights();
   }
 
+  virtual void offload_weights() { decoder_layer_->offload_weights(); }
+
+  virtual void reload_weights() { decoder_layer_->reload_weights(); }
+
  private:
   DecoderType decoder_layer_{nullptr};
   layer::BlockCopy block_copy_{nullptr};
@@ -240,7 +244,6 @@ class LlmModelImplBase : public torch::nn::Module {
   virtual void load_state_dict(const StateDict& state_dict) {
     embed_tokens_->load_state_dict(
         state_dict.get_dict_with_prefix("embed_tokens."));
-
     // call each layer's load_state_dict function
     for (int i = 0; i < layers_.size(); i++) {
       layers_[i]->load_state_dict(
@@ -265,18 +268,32 @@ class LlmModelImplBase : public torch::nn::Module {
     for (int i = 0; i < layers_.size(); i++) {
       layers_[i]->merge_loaded_weights();
     }
-    lazy_loader_->set_loaded_to_device(true);
     norm_->merge_loaded_weights();
+  }
+
+  virtual void offload_weights() {
+    embed_tokens_->offload_weights();
+    for (int i = 0; i < layers_.size(); i++) {
+      layers_[i]->offload_weights();
+    }
+    norm_->offload_weights();
+  }
+
+  virtual void reload_weights() {
+    embed_tokens_->reload_weights();
+    for (int i = 0; i < layers_.size(); i++) {
+      layers_[i]->reload_weights();
+    }
+    norm_->reload_weights();
   }
 
   virtual void merge_and_move_pinned_host() {
     // todo: word embed and norm need to be merged and moved to pinned host.
-    embed_tokens_->merge_loaded_weights();
-    auto load_func = [this](int layer_idx) {
-      layers_[layer_idx]->merge_and_move_pinned_host();
-    };
-    lazy_loader_->load_weights_to_host(load_func);
-    norm_->merge_loaded_weights();
+    embed_tokens_->merge_and_move_pinned_host();
+    for (int i = 0; i < layers_.size(); i++) {
+      layers_[i]->merge_and_move_pinned_host();
+    }
+    norm_->merge_and_move_pinned_host();
   }
 
   virtual layer::WordEmbedding get_word_embedding() { return embed_tokens_; }
@@ -372,6 +389,10 @@ class LlmForCausalLMImplBase : public torch::nn::Module {
   virtual void lazy_load_model(
       std::unique_ptr<ModelLoader> loader,
       std::string prefix = "model." /*llm model weight prefix*/) {
+    if (keep_host_weights) {
+      LOG(INFO) << "Model weights are already kept on host.";
+      return;
+    }
     for (const auto& state_dict : loader->get_state_dicts()) {
       model_->load_state_dict(state_dict->get_dict_with_prefix(prefix));
       if (tie_word_embeddings) {
@@ -387,7 +408,19 @@ class LlmForCausalLMImplBase : public torch::nn::Module {
 
     model_->merge_and_move_pinned_host();
     // test
-    lm_head_->merge_loaded_weights();
+    lm_head_->merge_and_move_pinned_host();
+
+    keep_host_weights = true;
+  }
+
+  virtual void offload_model_weights() {
+    model_->offload_weights();
+    lm_head_->offload_weights();
+  }
+
+  virtual void reload_model_weights() {
+    model_->reload_weights();
+    lm_head_->reload_weights();
   }
 
   virtual void prepare_expert_weight(int32_t layer_id,
@@ -413,6 +446,7 @@ class LlmForCausalLMImplBase : public torch::nn::Module {
   LlmModelType model_{nullptr};
   int device_id = 0;
   bool tie_word_embeddings{false};
+  bool keep_host_weights{false};
   // test
   layer::LmHead lm_head_{nullptr};
 };

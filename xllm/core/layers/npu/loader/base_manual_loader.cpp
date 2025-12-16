@@ -48,6 +48,21 @@ void BaseManualLoader::merge_and_move_pinned_host() {
   merge_host_at_weights();
   init_weight_slices();
   copy_weights_to_pinned_host();
+  // todo: support xtensor.
+}
+
+void BaseManualLoader::offload_weights() { release_device_storage(); }
+
+void BaseManualLoader::reload_weights() {
+  if (device_storage_) {
+    LOG(ERROR) << "Device storage already allocated.";
+    return;
+  }
+  auto ret = aclrtMallocAlign32(
+      &device_storage_, storage_size_, ACL_MEM_MALLOC_HUGE_FIRST);
+  CHECK_EQ(ret, ACL_SUCCESS)
+      << "Failed to allocate contiguous device storage size=" << storage_size_;
+  copy_weights_to_device_async();
   init_device_at_weights();
 }
 
@@ -91,11 +106,6 @@ void BaseManualLoader::copy_weights_to_pinned_host() {
     std::memcpy(dst, host_tensor.data_ptr(), slice.bytes);
     at_host_weight_tensors_[i] = at::Tensor();
   }
-
-  ret = aclrtMallocAlign32(
-      &device_storage_, storage_size_, ACL_MEM_MALLOC_HUGE_FIRST);
-  CHECK_EQ(ret, ACL_SUCCESS)
-      << "Failed to allocate contiguous device storage size=" << storage_size_;
 }
 
 void BaseManualLoader::copy_weights_to_device_async() {
@@ -121,7 +131,8 @@ void BaseManualLoader::copy_weights_to_device() {
   auto ret = aclrtMallocAlign32(
       &device_storage_, storage_size_, ACL_MEM_MALLOC_HUGE_FIRST);
   CHECK_EQ(ret, ACL_SUCCESS)
-      << "Failed to allocate contiguous device storage size=" << storage_size_;
+      << "Failed to allocate contiguous device storage size = "
+      << storage_size_;
 
   for (size_t i = 0; i < weight_slices_.size(); ++i) {
     const auto& slice = weight_slices_[i];
@@ -137,7 +148,7 @@ void BaseManualLoader::copy_weights_to_device() {
                            slice.bytes,
                            ACL_MEMCPY_HOST_TO_DEVICE);
     CHECK_EQ(err, ACL_SUCCESS) << "aclrtMemcpy failed for tensor index " << i;
-    at_host_weight_tensors_[i] = torch::Tensor();
+    at_host_weight_tensors_[i] = torch::zeros({1});
   }
 }
 
@@ -162,6 +173,7 @@ void BaseManualLoader::release_device_storage() {
   if (ret != ACL_SUCCESS) {
     LOG(ERROR) << "Failed to free contiguous layer storage, ret=" << ret;
   }
+  LOG(INFO) << "Free device storage success.";
   device_storage_ = nullptr;
 }
 

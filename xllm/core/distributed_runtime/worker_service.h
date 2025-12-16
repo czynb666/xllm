@@ -60,7 +60,7 @@ class WorkerService : public proto::DistributeWorker {
                            ::google::protobuf::Closure* done) override;
 
   void AllocateKVCache(::google::protobuf::RpcController* controller,
-                       const proto::KVCacheShape* request,
+                       const proto::AllocateKVCacheRequest* request,
                        proto::Status* response,
                        ::google::protobuf::Closure* done) override;
 
@@ -71,7 +71,7 @@ class WorkerService : public proto::DistributeWorker {
 
   void AllocateKVCacheWithTransfer(
       ::google::protobuf::RpcController* controller,
-      const proto::AllocateKVCacheWithTransferRequest* req,
+      const proto::AllocateKVCacheRequest* req,
       proto::Status* resp,
       ::google::protobuf::Closure* done) override;
 
@@ -124,6 +124,16 @@ class WorkerService : public proto::DistributeWorker {
                                  const proto::Empty* req,
                                  proto::ActivationMemory* resp,
                                  ::google::protobuf::Closure* done) override;
+
+  void Sleep(::google::protobuf::RpcController* controller,
+             const proto::SleepRequest* req,
+             proto::Status* resp,
+             ::google::protobuf::Closure* done) override;
+
+  void Wakeup(::google::protobuf::RpcController* controller,
+              const proto::WakeupRequest* req,
+              proto::Status* resp,
+              ::google::protobuf::Closure* done) override;
 
  private:
   void step(ForwardInput& fwd_input,

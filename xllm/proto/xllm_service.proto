@@ -41,6 +41,18 @@ message ClusterInfos {
   repeated string addrs = 5;
 }
 
+message MasterInfos {
+  string model_id = 1;
+  string model_path = 2;
+  string master_node_addr = 3;
+  uint64 max_tokens_per_batch = 4;
+  uint64 max_seqs_per_batch = 5;
+  uint64 block_size = 6;
+  int32 dp_size = 7;
+  int32 ep_size = 8;
+  int32 master_status = 9;
+}
+
 service XllmAPIService {
   rpc Completions (CompletionRequest) returns (CompletionResponse);
   rpc CompletionsHttp (HttpRequest) returns (HttpResponse);
@@ -64,4 +76,13 @@ service XllmAPIService {
   rpc LinkCluster (HttpRequest) returns (HttpResponse);
   rpc UnlinkCluster (HttpRequest) returns (HttpResponse);
   rpc ModelVersionsHttp (HttpRequest) returns (HttpResponse);
-};
+
+  rpc ForkMaster (MasterInfos) returns (RpcStatus);
+  rpc ForkMasterHttp (HttpRequest) returns (HttpResponse);
+  
+  rpc Sleep (MasterInfos) returns (RpcStatus);
+  rpc SleepHttp (HttpRequest) returns (HttpResponse);
+
+  rpc Wakeup (MasterInfos) returns (RpcStatus);
+  rpc WakeupHttp (HttpRequest) returns (HttpResponse);
+}; 

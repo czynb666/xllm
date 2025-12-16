@@ -157,6 +157,7 @@ CompletionServiceImpl::CompletionServiceImpl(
     const std::vector<std::string>& models)
     : APIServiceImpl(models), master_(master) {
   CHECK(master_ != nullptr);
+  model_to_master_[models[0]] = master;
 }
 
 // complete_async for brpc

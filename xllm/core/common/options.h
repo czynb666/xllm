@@ -193,6 +193,10 @@ class Options {
   // Index ID for internal server ID, which must be set different values
   // if the model supports multiple version or there are multiple models.
   PROPERTY(int64_t, server_idx) = 0;
+
+  // sleep mode means the model is not active,
+  // it will be activated when the first request comes.
+  PROPERTY(bool, sleep_mode) = false;
 };
 
 }  // namespace xllm

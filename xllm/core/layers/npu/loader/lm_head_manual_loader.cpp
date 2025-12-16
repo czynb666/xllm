@@ -13,27 +13,34 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "rms_norm_loader.h"
+#include "lm_head_manual_loader.h"
 
 namespace xllm {
 namespace layer {
 
-RMSNormLoader::RMSNormLoader(uint64_t weight_count, const ModelContext& context)
-    : BaseLoader(weight_count, context) {
+LmHeadManualLoader::LmHeadManualLoader(uint64_t weight_count,
+                                       const ModelContext& context)
+    : BaseManualLoader(weight_count, context) {
   auto options = context.get_tensor_options();
-  dtype_ = torch::typeMetaToScalarType(options.dtype());
   at_weight_tensors_[0] = torch::zeros({1}).to(options);
 }
 
-void RMSNormLoader::load_state_dict(const StateDict& state_dict) {
-  set_weight(state_dict, "weight", 0);
-  at_weight_tensors_[0] = at_weight_tensors_[0].to(dtype_);
+void LmHeadManualLoader::load_state_dict(const StateDict& state_dict) {
+  if (dp_size_ > 1) {
+    set_weight(
+        state_dict, "weight", 0, 0, dp_local_tp_rank_, dp_local_tp_size_, true);
+  } else {
+    set_weight(state_dict, "weight", 0, 0, true);
+  }
 }
 
-void RMSNormLoader::verify_loaded_weights(const std::string& weight_str) const {
-  CHECK(at_weight_tensors_[0].sizes() != std::vector<int64_t>({1}))
-      << "final norm weight is not loaded for " << weight_str;
+void LmHeadManualLoader::verify_loaded_weights(
+    const std::string& weight_str) const {
+  CHECK(at_host_weight_tensors_[0].sizes() != std::vector<int64_t>({1}))
+      << "final lm_head weight is not loaded for " << weight_str;
 }
+
+void LmHeadManualLoader::merge_host_at_weights() {}
 
 }  // namespace layer
 }  // namespace xllm

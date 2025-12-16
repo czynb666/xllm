@@ -42,6 +42,7 @@ limitations under the License.
 #include "framework/sampling/sampler.h"
 #include "framework/state_dict/state_dict.h"
 #include "framework/xtensor/multi_layer_xtensor_transfer.h"
+#include "master.h"
 #include "util/net.h"
 #include "util/tensor_helper.h"
 #include "util/threadpool.h"
@@ -89,12 +90,8 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
 
 WorkerImpl::~WorkerImpl() = default;
 
-bool WorkerImpl::allocate_kv_cache(
+void WorkerImpl::allocate_device_kv_cache(
     const std::vector<std::vector<int64_t>>& kv_cache_shape) {
-  CHECK(model_ != nullptr) << "Model is not initialized.";
-  CHECK(kv_caches_.empty()) << "KV caches are already initialized.";
-
-  // create a KVCache for each layer
   const int64_t num_layers = context_.get_model_args().n_layers();
   const bool enable_lighting_indexer =
       context_.get_model_args().index_n_heads() > 0;
@@ -130,7 +127,14 @@ bool WorkerImpl::allocate_kv_cache(
     value_cache_size_per_layer_ = kv_caches_[0].get_v_cache()[0].numel() *
                                   kv_caches_[0].get_v_cache()[0].element_size();
   }
+}
 
+bool WorkerImpl::allocate_kv_cache(
+    const std::vector<std::vector<int64_t>>& kv_cache_shape) {
+  CHECK(model_ != nullptr) << "Model is not initialized.";
+  CHECK(kv_caches_.empty()) << "KV caches are already initialized.";
+  // create a KVCache for each layer
+  allocate_device_kv_cache(kv_cache_shape);
   allocate_host_kv_cache(kv_cache_shape);
   status_ = Status::READY;
   return true;
@@ -138,7 +142,7 @@ bool WorkerImpl::allocate_kv_cache(
 
 bool WorkerImpl::allocate_host_kv_cache(
     const std::vector<std::vector<int64_t>>& device_kv_cache_shape) {
-  if (options_.host_blocks_factor() <= 0.00001) {
+  if (options_.host_blocks_factor() <= 0.00001 || host_kv_caches_initialized_) {
     return true;
   }
 #if defined(USE_NPU)
@@ -192,9 +196,9 @@ bool WorkerImpl::allocate_host_kv_cache(
       return false;
     }
   }
-
   status_ = Status::READY;
 #endif
+  host_kv_caches_initialized_ = true;
   return true;
 }
 
@@ -230,8 +234,7 @@ bool WorkerImpl::allocate_continuous_kv_cache(
   return true;
 }
 
-bool WorkerImpl::allocate_kv_cache_with_transfer(
-    uint64_t kv_cache_size,
+bool WorkerImpl::allocate_device_kv_cache_with_transfer(
     const std::vector<std::vector<int64_t>>& kv_cache_shape) {
 #if defined(USE_NPU)
   CHECK(model_ != nullptr) << "Model is not initialized.";
@@ -260,10 +263,6 @@ bool WorkerImpl::allocate_kv_cache_with_transfer(
     kv_cache_transfer_->register_kv_cache(kv_caches_, kv_cache_shape, dtype_);
   }
 #endif
-
-  allocate_host_kv_cache(kv_cache_shape);
-  status_ = Status::READY;
-  return true;
 }
 
 #if defined(USE_NPU)
@@ -291,6 +290,29 @@ bool WorkerImpl::allocate_kv_cache_with_transfer(
   return true;
 }
 #endif
+
+bool WorkerImpl::allocate_kv_cache_with_transfer(
+    const std::vector<std::vector<int64_t>>& kv_cache_shape) {
+  is_transfer_kv_cache = true;
+
+  allocate_device_kv_cache_with_transfer(kv_cache_shape);
+  allocate_host_kv_cache(kv_cache_shape);
+  status_ = Status::READY;
+  return true;
+}
+
+folly::SemiFuture<bool> WorkerImpl::allocate_kv_cache_with_transfer_async(
+    const std::vector<std::vector<int64_t>>& kv_cache_shape) {
+  folly::Promise<bool> promise;
+  auto future = promise.getSemiFuture();
+  threadpool_.schedule(
+      [this, &kv_cache_shape, promise = std::move(promise)]() mutable {
+        const bool success =
+            this->allocate_kv_cache_with_transfer(kv_cache_shape);
+        promise.setValue(success);
+      });
+  return future;
+}
 
 void WorkerImpl::get_device_info(std::string& device_ip, uint16_t& port) {
   // device_ip = options_.device_ip().value();
@@ -563,29 +585,84 @@ folly::SemiFuture<folly::Unit> WorkerImpl::process_group_test_async() {
   return future;
 }
 
-// initialize model, cache manager. async call
 folly::SemiFuture<bool> WorkerImpl::init_model_async(
     const std::string& model_weights_path,
-    int32_t random_seed) {
+    int32_t random_seed,
+    bool sleep_mode) {
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();
   threadpool_.schedule([this,
                         model_weights_path,
                         random_seed,
+                        sleep_mode,
                         promise = std::move(promise)]() mutable {
-    auto status = this->init_model(model_weights_path, random_seed);
+    auto status = this->init_model(model_weights_path, random_seed, sleep_mode);
     promise.setValue(status);
   });
 
   return future;
 }
 
+bool WorkerImpl::deallocate_kv_cache() {
+  if (is_transfer_kv_cache) {
+    kv_cache_transfer_->free_kv_cache();
+  } else {
+    kv_caches_.clear();
+    LOG(INFO) << "Cleared kv cache tensors.";
+  }
+
+  return true;
+}
+
+bool WorkerImpl::sleep(int32_t master_status) {
+  // handle kv cache
+  deallocate_kv_cache();
+  // handle model weights
+  if (master_status == LIGHT_SLEEP) {
+    auto model_loader = ModelLoader::create(model_weights_path_);
+    model_->lazy_load_model(std::move(model_loader));
+  }
+  model_->offload_model_weights();
+#if defined(USE_NPU)
+  c10_npu::NPUCachingAllocator::emptyCache();
+#endif
+#if defined(USE_MLU)
+  torch_mlu::MLUCachingAllocator::emptyCache();
+#endif
+#if defined(USE_CUDA) || defined(USE_ILU)
+  c10::cuda::CUDACachingAllocator::emptyCache();
+#endif
+
+  return true;
+}
+
+bool WorkerImpl::wakeup(const std::vector<std::vector<int64_t>>& kv_cache_shape,
+                        int32_t master_status) {
+  if (is_transfer_kv_cache) {
+    allocate_kv_cache_with_transfer(kv_cache_shape);
+  } else {
+    allocate_kv_cache(kv_cache_shape);
+  }
+
+  if (master_status == LIGHT_SLEEP) {
+    model_->reload_model_weights();
+  } else {
+    auto model_loader = ModelLoader::create(model_weights_path_);
+    model_->load_model(std::move(model_loader));
+  }
+
+  return true;
+}
+
+// initialize model, cache manager. async call
 bool WorkerImpl::init_model(const std::string& model_weights_path,
-                            int32_t random_seed) {
+                            int32_t random_seed,
+                            bool sleep_mode) {
   // set same random seed for all worker
   device_.set_seed(random_seed);
 
   auto model_loader = ModelLoader::create(model_weights_path);
+  model_weights_path_ = std::move(model_weights_path);
   auto tokenizer = model_loader->tokenizer();
   CHECK(tokenizer != nullptr);
 
@@ -639,7 +716,11 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
     return false;
   }
 
-  this->load_model(std::move(model_loader));
+  if (!sleep_mode) {
+    this->load_model(std::move(model_loader));
+  } else {
+    this->lazy_load_model(std::move(model_loader));
+  }
 
   status_ = Status::LOADED;
   if (FLAGS_enable_eplb) {
@@ -658,6 +739,12 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
 void WorkerImpl::load_model(std::unique_ptr<ModelLoader> loader) {
   CHECK(model_ != nullptr) << "Model is not initialized.";
   model_->load_model(std::move(loader));
+}
+
+void WorkerImpl::lazy_load_model(std::unique_ptr<ModelLoader> loader) {
+  CHECK(model_ != nullptr) << "Model is not initialized.";
+  LOG(INFO) << "lazy_load_model 1231241";
+  model_->lazy_load_model(std::move(loader));
 }
 
 folly::SemiFuture<bool> WorkerImpl::allocate_kv_cache_async(
@@ -735,22 +822,6 @@ void WorkerImpl::transfer_kv_blocks(
             break;
         }
       });
-}
-
-folly::SemiFuture<bool> WorkerImpl::allocate_kv_cache_with_transfer_async(
-    uint64_t kv_cache_size,
-    const std::vector<std::vector<int64_t>>& kv_cache_shape) {
-  folly::Promise<bool> promise;
-  auto future = promise.getSemiFuture();
-  threadpool_.schedule([this,
-                        kv_cache_size,
-                        &kv_cache_shape,
-                        promise = std::move(promise)]() mutable {
-    const bool success =
-        this->allocate_kv_cache_with_transfer(kv_cache_size, kv_cache_shape);
-    promise.setValue(success);
-  });
-  return future;
 }
 
 int64_t WorkerImpl::get_active_activation_memory() {

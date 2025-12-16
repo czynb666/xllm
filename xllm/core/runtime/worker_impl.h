@@ -66,9 +66,12 @@ class WorkerImpl {
   virtual bool init_model(ModelContext& context) = 0;
 
   virtual bool init_model(const std::string& model_weights_path,
-                          int32_t random_seed);
+                          int32_t random_seed,
+                          bool sleep_mode = false);
 
   virtual void load_model(std::unique_ptr<ModelLoader> loader);
+
+  virtual void lazy_load_model(std::unique_ptr<ModelLoader> loader);
 
   virtual std::tuple<int64_t, int64_t> estimate_kv_cache_capacity();
 
@@ -79,8 +82,13 @@ class WorkerImpl {
   virtual bool allocate_host_kv_cache(
       const std::vector<std::vector<int64_t>>& kv_cache_shape);
 
+  virtual void allocate_device_kv_cache(
+      const std::vector<std::vector<int64_t>>& kv_cache_shape);
+
+  virtual bool allocate_device_kv_cache_with_transfer(
+      const std::vector<std::vector<int64_t>>& kv_cache_shape);
+
   virtual bool allocate_kv_cache_with_transfer(
-      uint64_t kv_cache_size,
       const std::vector<std::vector<int64_t>>& kv_cache_shape);
 
 #if defined(USE_NPU)
@@ -125,7 +133,8 @@ class WorkerImpl {
   // initialize model, cache manager. async call
   virtual folly::SemiFuture<bool> init_model_async(
       const std::string& model_weights_path,
-      int32_t random_seed);
+      int32_t random_seed,
+      bool sleep_mode = false);
 
   virtual folly::SemiFuture<std::tuple<int64_t, int64_t>>
   estimate_kv_cache_capacity_async();
@@ -135,8 +144,14 @@ class WorkerImpl {
       const std::vector<std::vector<int64_t>>& kv_cache_shape);
 
   virtual folly::SemiFuture<bool> allocate_kv_cache_with_transfer_async(
-      uint64_t kv_cache_size,
       const std::vector<std::vector<int64_t>>& kv_cache_shape);
+
+  virtual bool sleep(int32_t master_status);
+
+  virtual bool wakeup(const std::vector<std::vector<int64_t>>& kv_cache_shape,
+                      int32_t master_status);
+
+  virtual bool deallocate_kv_cache();
 
   virtual folly::SemiFuture<bool> allocate_continuous_kv_cache_async(
       const std::vector<XTensor::Options>& options);
@@ -274,6 +289,12 @@ class WorkerImpl {
   Status status_ = Status::UNINITIALIZED;
 
   torch::Tensor expert_load_data_;
+
+  bool host_kv_caches_initialized_ = false;
+
+  bool is_transfer_kv_cache = false;
+
+  std::string model_weights_path_;
 };
 
 class AlignedTensorCreater {

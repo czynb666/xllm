@@ -53,7 +53,7 @@ class LLMEngine : public Engine {
 
   const runtime::Options& options() const { return options_; }
 
-  bool init() override;
+  bool init(bool sleep_mode = false) override;
 
   void update_last_step_result(std::vector<Batch>& batch) override;
 
@@ -109,13 +109,20 @@ class LLMEngine : public Engine {
 
   std::shared_ptr<DistManager> get_dist_manager() { return dist_manager_; };
 
+  bool sleep(int32_t master_status) override;
+
+  bool wakeup(int32_t master_status) override;
+
  private:
   friend class SpeculativeEngine;
   // setup workers internal
   void setup_workers(const runtime::Options& options);
-  bool init_model();
+  bool init_model(bool sleep_mode = false);
   Engine::KVCacheCapacity estimate_kv_cache_capacity();
   bool allocate_kv_cache(const Engine::KVCacheCapacity& kv_cache_cap);
+  bool allocate_worker_kv_cache(
+      const std::vector<std::vector<int64_t>>& kv_cache_shape);
+  void init_kv_cache_manager(const Engine::KVCacheCapacity& kv_cache_cap);
   bool allocate_continuous_kv_cache(
       const Engine::KVCacheCapacity& kv_cache_cap);
   std::vector<RawForwardInput> prepare_inputs(std::vector<Batch>& batch);
@@ -171,6 +178,9 @@ class LLMEngine : public Engine {
   std::vector<uint16_t> worker_ports_;
 
   bool layer_forward_interrupted_ = false;
+
+  Engine::KVCacheCapacity kv_cache_cap_;
+  std::vector<std::vector<int64_t>> kv_cache_shape_;
 
   // threadpool for link cluster
   std::unique_ptr<ThreadPool> link_threadpool_;

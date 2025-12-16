@@ -90,6 +90,10 @@ class LLMMaster : public Master {
                       const std::vector<uint16_t>& ports,
                       const int32_t dp_size);
 
+  bool sleep() override;
+
+  bool wakeup() override;
+
  private:
   std::shared_ptr<Request> generate_request(
       std::string prompt,

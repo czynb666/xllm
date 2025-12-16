@@ -63,11 +63,13 @@ class CommChannel {
                               const std::vector<uint16_t>& ports);
 
   virtual bool init_model(const std::string& model_weights_path,
-                          int32_t random_seed);
+                          int32_t random_seed,
+                          bool sleep_mode = false);
 
   virtual bool init_model_async(const std::string& model_weights_path,
                                 int32_t random_seed,
-                                folly::Promise<bool>& promise);
+                                folly::Promise<bool>& promise,
+                                bool sleep_mode = false);
 
   virtual bool estimate_kv_cache_capacity(int64_t& available_memory,
                                           int64_t& total_memory);
@@ -86,7 +88,6 @@ class CommChannel {
   virtual bool process_group_test();
 
   virtual bool allocate_kv_cache_with_transfer(
-      const uint64_t kv_cache_size,
       const std::vector<std::vector<int64_t>>& kv_cache_shape);
 
   virtual void transfer_kv_blocks(
@@ -109,6 +110,11 @@ class CommChannel {
 
   virtual bool get_active_activation_memory_async(
       folly::Promise<int64_t>& promise);
+
+  virtual bool sleep(int32_t master_status);
+
+  virtual bool wakeup(const std::vector<std::vector<int64_t>>& kv_cache_shape,
+                      int32_t master_status);
 
  protected:
   bool execute_model_with_brpc(

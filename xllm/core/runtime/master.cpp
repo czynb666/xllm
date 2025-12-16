@@ -223,7 +223,8 @@ Master::Master(const Options& options, EngineType type) : options_(options) {
         .spawn_worker_path(options_.spawn_worker_path())
         .enable_shm(options_.enable_shm())
         .is_local(options_.is_local())
-        .server_idx(options_.server_idx());
+        .server_idx(options_.server_idx())
+        .sleep_mode(options_.sleep_mode());
 
     if (options_.device_ip().has_value()) {
       eng_options.device_ip(options_.device_ip().value());
@@ -250,4 +251,24 @@ std::unique_ptr<Master> create_master(const std::string& backend,
   }
 }
 
+std::unique_ptr<Master> fork_master(Master* master, const Options& options) {
+  CHECK(master != nullptr);
+
+  Options new_options = master->options();
+
+  if (!options.model_id().empty()) {
+    new_options.model_id() = options.model_id();
+  }
+  if (!options.model_path().empty()) {
+    new_options.model_path() = options.model_path();
+  }
+  new_options.max_tokens_per_batch() = options.max_tokens_per_batch();
+  new_options.max_seqs_per_batch() = options.max_seqs_per_batch();
+  new_options.block_size() = options.block_size();
+  new_options.dp_size() = options.dp_size();
+  new_options.ep_size() = options.ep_size();
+  new_options.master_node_addr() = options.master_node_addr();
+  new_options.sleep_mode() = true;
+  return create_master(new_options.backend(), new_options);
+}
 }  // namespace xllm

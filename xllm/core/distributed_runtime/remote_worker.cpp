@@ -105,8 +105,9 @@ bool RemoteWorker::unlink_cluster(const std::vector<uint64_t>& cluster_ids,
 }
 
 bool RemoteWorker::init_model(const std::string& model_weights_path,
-                              int32_t random_seed) {
-  return channel_->init_model(model_weights_path, random_seed);
+                              int32_t random_seed,
+                              bool sleep_mode) {
+  return channel_->init_model(model_weights_path, random_seed, sleep_mode);
 }
 
 std::tuple<int64_t, int64_t> RemoteWorker::estimate_kv_cache_capacity() {
@@ -192,15 +193,18 @@ folly::SemiFuture<folly::Unit> RemoteWorker::process_group_test_async() {
 
 folly::SemiFuture<bool> RemoteWorker::init_model_async(
     const std::string& model_weights_path,
-    int32_t random_seed) {
+    int32_t random_seed,
+    bool sleep_mode) {
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();
   threadpool_.schedule([this,
                         model_weights_path,
                         random_seed,
-                        promise = std::move(promise)]() mutable {
+                        promise = std::move(promise),
+                        sleep_mode]() mutable {
     // call InitModel with callback
-    channel_->init_model_async(model_weights_path, random_seed, promise);
+    channel_->init_model_async(
+        model_weights_path, random_seed, promise, sleep_mode);
   });
   return future;
 }
@@ -237,22 +241,18 @@ folly::SemiFuture<bool> RemoteWorker::allocate_continuous_kv_cache_async(
 }
 
 folly::SemiFuture<bool> RemoteWorker::allocate_kv_cache_with_transfer_async(
-    const uint64_t kv_cache_size,
     const std::vector<std::vector<int64_t>>& kv_cache_shape) {
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();
-  threadpool_.schedule([this,
-                        kv_cache_size,
-                        kv_cache_shape,
-                        promise = std::move(promise)]() mutable {
-    if (!channel_->allocate_kv_cache_with_transfer(kv_cache_size,
-                                                   kv_cache_shape)) {
-      LOG(ERROR) << "AllocateKVCacheWithTransfer failed";
-      promise.setValue(false);
-    } else {
-      promise.setValue(true);
-    }
-  });
+  threadpool_.schedule(
+      [this, kv_cache_shape, promise = std::move(promise)]() mutable {
+        if (!channel_->allocate_kv_cache_with_transfer(kv_cache_shape)) {
+          LOG(ERROR) << "AllocateKVCacheWithTransfer failed";
+          promise.setValue(false);
+        } else {
+          promise.setValue(true);
+        }
+      });
   return future;
 }
 
@@ -350,6 +350,40 @@ folly::SemiFuture<int64_t> RemoteWorker::get_active_activation_memory_async() {
   auto future = promise.getSemiFuture();
   threadpool_.schedule([this, promise = std::move(promise)]() mutable {
     channel_->get_active_activation_memory_async(promise);
+  });
+  return future;
+}
+
+folly::SemiFuture<bool> RemoteWorker::sleep_async(int32_t master_status) {
+  folly::Promise<bool> promise;
+  auto future = promise.getSemiFuture();
+  threadpool_.schedule(
+      [this, promise = std::move(promise), master_status]() mutable {
+        if (!channel_->sleep(master_status)) {
+          LOG(ERROR) << "Sleep failed";
+          promise.setValue(false);
+        } else {
+          promise.setValue(true);
+        }
+      });
+  return future;
+}
+
+folly::SemiFuture<bool> RemoteWorker::wakeup_async(
+    const std::vector<std::vector<int64_t>>& kv_cache_shape,
+    int32_t master_status) {
+  folly::Promise<bool> promise;
+  auto future = promise.getSemiFuture();
+  threadpool_.schedule([this,
+                        kv_cache_shape,
+                        promise = std::move(promise),
+                        master_status]() mutable {
+    if (!channel_->wakeup(kv_cache_shape, master_status)) {
+      LOG(ERROR) << "Wakeup failed";
+      promise.setValue(false);
+    } else {
+      promise.setValue(true);
+    }
   });
   return future;
 }

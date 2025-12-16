@@ -167,9 +167,12 @@ Qwen2DecoderLayerImpl::Qwen2DecoderLayerImpl(const ModelContext& context)
 }
 
 void Qwen2DecoderLayerImpl::initialize_linear_transpose_type() {
-  auto& at_host_weight_tensors = loader_->get_at_host_weight_tensors();
+  auto* manual_loader = dynamic_cast<BaseManualLoader*>(loader_.get());
+  auto& at_weight_tensors = (manual_loader != nullptr)
+                                ? loader_->get_at_host_weight_tensors()
+                                : loader_->get_at_weight_tensors();
   TransposeType transpose_type =
-      check_transpose(at_host_weight_tensors[IN_MLP_W2_WEIGHT]);
+      check_transpose(at_weight_tensors[IN_MLP_W2_WEIGHT]);
   int transpose_value = static_cast<int>(transpose_type);
   prefill_param_.linearTransposeType[4] = transpose_value;
   decode_param_.linearTransposeType[4] = transpose_value;
@@ -196,7 +199,6 @@ void Qwen2DecoderLayerImpl::merge_loaded_weights() {
     atb_weight_tensors_[i] =
         atb_speed::Utils::AtTensor2Tensor(at_weight_tensors[i]);
   }
-
   init_layer();
 }
 

@@ -16,7 +16,7 @@ limitations under the License.
 
 #pragma once
 
-#include <absl/container/flat_hash_set.h>
+#include <unordered_map>
 
 #include "api_service_impl.h"
 #include "completion.pb.h"
@@ -39,6 +39,7 @@ class CompletionServiceImpl final : public APIServiceImpl<CompletionCall> {
  private:
   DISALLOW_COPY_AND_ASSIGN(CompletionServiceImpl);
   LLMMaster* master_ = nullptr;
+  std::unordered_map<std::string, LLMMaster*> model_to_master_;
 };
 
 }  // namespace xllm

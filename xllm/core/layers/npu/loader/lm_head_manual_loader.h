@@ -13,27 +13,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "rms_norm_loader.h"
+#pragma once
+
+#include "base_manual_loader.h"
 
 namespace xllm {
 namespace layer {
+class LmHeadManualLoader : public BaseManualLoader {
+ public:
+  LmHeadManualLoader(uint64_t weight_count, const ModelContext& context);
 
-RMSNormLoader::RMSNormLoader(uint64_t weight_count, const ModelContext& context)
-    : BaseLoader(weight_count, context) {
-  auto options = context.get_tensor_options();
-  dtype_ = torch::typeMetaToScalarType(options.dtype());
-  at_weight_tensors_[0] = torch::zeros({1}).to(options);
-}
+  void load_state_dict(const StateDict& state_dict) override;
+  void verify_loaded_weights(const std::string& weight_str) const override;
 
-void RMSNormLoader::load_state_dict(const StateDict& state_dict) {
-  set_weight(state_dict, "weight", 0);
-  at_weight_tensors_[0] = at_weight_tensors_[0].to(dtype_);
-}
-
-void RMSNormLoader::verify_loaded_weights(const std::string& weight_str) const {
-  CHECK(at_weight_tensors_[0].sizes() != std::vector<int64_t>({1}))
-      << "final norm weight is not loaded for " << weight_str;
-}
-
+ protected:
+  void merge_host_at_weights() override;
+};
 }  // namespace layer
 }  // namespace xllm

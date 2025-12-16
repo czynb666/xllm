@@ -107,8 +107,8 @@ void LLMEngine::process_group_test() {
 #endif
 }
 
-bool LLMEngine::init() {
-  if (!init_model()) {
+bool LLMEngine::init(bool sleep_mode) {
+  if (!init_model(sleep_mode)) {
     LOG(ERROR) << "Failed to init model from: " << options_.model_path();
     return false;
   }
@@ -120,19 +120,24 @@ bool LLMEngine::init() {
         num_layers, worker_clients_num_, num_experts);
   }
 
-  auto kv_cache_cap = estimate_kv_cache_capacity();
+  kv_cache_cap_ = std::move(estimate_kv_cache_capacity());
 
-  if (!(FLAGS_enable_continuous_kvcache
-            ? allocate_continuous_kv_cache(kv_cache_cap)
-            : allocate_kv_cache(kv_cache_cap))) {
-    LOG(ERROR) << "Failed to initialize  kv cache";
-    return false;
+  if (!sleep_mode) {
+    if (!(FLAGS_enable_continuous_kvcache
+              ? allocate_continuous_kv_cache(kv_cache_cap_)
+              : allocate_kv_cache(kv_cache_cap_))) {
+      LOG(ERROR) << "Failed to initialize  kv cache";
+      return false;
+    } else {
+      LOG(INFO) << "Successfully initialized kv cache";
+    }
+  } else {
+    LOG(INFO) << "Successfully initialized kv cache in sleep mode";
   }
-
   return true;
 }
 
-bool LLMEngine::init_model() {
+bool LLMEngine::init_model(bool sleep_mode) {
   const std::string& model_path = options_.model_path();
   auto model_loader = ModelLoader::create(model_path);
   LOG(INFO) << "Initializing model from: " << model_path;
@@ -288,7 +293,38 @@ Engine::KVCacheCapacity LLMEngine::estimate_kv_cache_capacity() {
   return kv_cache_cap;
 }
 
-bool LLMEngine::allocate_kv_cache(const Engine::KVCacheCapacity& kv_cache_cap) {
+bool LLMEngine::allocate_worker_kv_cache(
+    const std::vector<std::vector<int64_t>>& kv_cache_shape) {
+  // init kv cache for each worker in parallel
+  std::vector<folly::SemiFuture<bool>> futures;
+  futures.reserve(worker_clients_num_);
+  if (options_.instance_role() == InstanceRole::DEFAULT) {
+    for (auto& worker : worker_clients_) {
+      futures.push_back(worker->allocate_kv_cache_async(kv_cache_shape));
+    }
+  } else {
+    if (!options_.device_ip().has_value()) {
+      LOG(ERROR)
+          << "KVCacheTransfer required device_ip, current value is empty.";
+      return false;
+    }
+    for (auto& worker : worker_clients_) {
+      futures.push_back(
+          worker->allocate_kv_cache_with_transfer_async(kv_cache_shape));
+    }
+  }
+  // wait for all futures to complete
+  auto results = folly::collectAll(futures).get();
+  for (const auto& result : results) {
+    if (!result.value()) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void LLMEngine::init_kv_cache_manager(
+    const Engine::KVCacheCapacity& kv_cache_cap) {
   LOG(INFO) << "kv cache capacity: "
             << readable_size(kv_cache_cap.cache_size_in_bytes)
             << ", blocks: " << kv_cache_cap.n_blocks
@@ -337,6 +373,7 @@ bool LLMEngine::allocate_kv_cache(const Engine::KVCacheCapacity& kv_cache_cap) {
               << "]";
   }
 
+  kv_cache_shape_ = std::move(kv_cache_shape);
   // initialize block manager
   BlockManagerPool::Options options;
   options.num_blocks(kv_cache_cap.n_blocks)
@@ -347,33 +384,11 @@ bool LLMEngine::allocate_kv_cache(const Engine::KVCacheCapacity& kv_cache_cap) {
       .enable_cache_upload(options_.enable_cache_upload())
       .enable_kvcache_store(options_.enable_kvcache_store());
   kv_cache_manager_ = std::make_unique<BlockManagerPool>(options, dp_size_);
+}
 
-  // init kv cache for each worker in parallel
-  std::vector<folly::SemiFuture<bool>> futures;
-  futures.reserve(worker_clients_num_);
-  if (options_.instance_role() == InstanceRole::DEFAULT) {
-    for (auto& worker : worker_clients_) {
-      futures.push_back(worker->allocate_kv_cache_async(kv_cache_shape));
-    }
-  } else {
-    if (!options_.device_ip().has_value()) {
-      LOG(ERROR)
-          << "KVCacheTransfer required device_ip, current value is empty.";
-      return false;
-    }
-    for (auto& worker : worker_clients_) {
-      futures.push_back(worker->allocate_kv_cache_with_transfer_async(
-          kv_cache_cap.cache_size_in_bytes, kv_cache_shape));
-    }
-  }
-  // wait for all futures to complete
-  auto results = folly::collectAll(futures).get();
-  for (const auto& result : results) {
-    if (!result.value()) {
-      return false;
-    }
-  }
-  return true;
+bool LLMEngine::allocate_kv_cache(const Engine::KVCacheCapacity& kv_cache_cap) {
+  init_kv_cache_manager(kv_cache_cap);
+  return allocate_worker_kv_cache(kv_cache_shape_);
 }
 
 bool LLMEngine::allocate_continuous_kv_cache(
@@ -892,6 +907,63 @@ std::vector<RawForwardInput> LLMEngine::prepare_inputs(
   }
 
   return batched_inputs;
+}
+
+bool LLMEngine::sleep(int32_t master_status) {
+  LOG(INFO) << "Starting to sleep. Worker clients count: "
+            << worker_clients_num_;
+  if (worker_clients_.empty()) {
+    LOG(ERROR) << "No worker clients available to sleep.";
+    return false;
+  }
+  std::vector<folly::SemiFuture<bool>> futures;
+  futures.reserve(worker_clients_num_);
+
+  for (auto& worker : worker_clients_) {
+    futures.push_back(worker->sleep_async(master_status));
+  }
+
+  auto results = folly::collectAll(futures).get();
+
+  for (const auto& result : results) {
+    if (!result.value()) {
+      LOG(ERROR) << "Sleep failed.";
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool LLMEngine::wakeup(int32_t master_status) {
+  LOG(INFO) << "Starting to wakeup. Worker clients count: "
+            << worker_clients_num_;
+  if (worker_clients_.empty()) {
+    LOG(ERROR) << "No worker clients available to wakeup.";
+    return false;
+  }
+
+  if (!kv_cache_manager_) {
+    init_kv_cache_manager(kv_cache_cap_);
+  }
+  LOG(INFO) << "Waking up LLM engine.";
+  std::vector<folly::SemiFuture<bool>> futures;
+  futures.reserve(worker_clients_num_);
+
+  for (auto& worker : worker_clients_) {
+    futures.push_back(worker->wakeup_async(kv_cache_shape_, master_status));
+  }
+
+  auto results = folly::collectAll(futures).get();
+
+  for (const auto& result : results) {
+    if (!result.value()) {
+      LOG(ERROR) << "Wakeup failed.";
+      return false;
+    }
+  }
+
+  return true;
 }
 
 }  // namespace xllm

@@ -47,6 +47,9 @@ cc_library(
     loader/qwen2_decoder_manual_loader.h
     loader/qwen3_decoder_manual_loader.h
     loader/deepseek_v2_decoder_manual_loader.h
+    loader/rms_norm_manual_loader.h
+    loader/word_embedding_manual_loader.h
+    loader/lm_head_manual_loader.h
   SRCS
     npu_word_embedding_impl.cpp
     npu_pos_embedding_impl.cpp
@@ -89,6 +92,9 @@ cc_library(
     loader/qwen2_decoder_manual_loader.cpp
     loader/qwen3_decoder_manual_loader.cpp
     loader/deepseek_v2_decoder_manual_loader.cpp
+    loader/rms_norm_manual_loader.cpp
+    loader/word_embedding_manual_loader.cpp
+    loader/lm_head_manual_loader.cpp
   DEPS
     "-Wl,--whole-archive"
     "-Wl,--no-whole-archive"
