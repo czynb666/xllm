@@ -48,7 +48,7 @@ class RemoteWorker : public WorkerClient {
 
   virtual bool init_model(const std::string& model_weights_path,
                           int32_t random_seed,
-                          bool sleep_mode = false) override;
+                          int32_t master_status) override;
 
   virtual std::tuple<int64_t, int64_t> estimate_kv_cache_capacity() override;
 
@@ -91,7 +91,7 @@ class RemoteWorker : public WorkerClient {
   virtual folly::SemiFuture<bool> init_model_async(
       const std::string& model_weights_path,
       int32_t random_seed,
-      bool sleep_mode = false) override;
+      int32_t master_status) override;
 
   virtual folly::SemiFuture<std::tuple<int64_t, int64_t>>
   estimate_kv_cache_capacity_async() override;

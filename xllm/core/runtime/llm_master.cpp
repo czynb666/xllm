@@ -48,7 +48,7 @@ LLMMaster::LLMMaster(const Options& options)
              options.draft_model_path().value_or("").empty()
                  ? EngineType::LLM
                  : EngineType::SSM) {
-  CHECK(engine_->init(options_.sleep_mode()));
+  CHECK(engine_->init(master_status_));
   task_type_ = options_.task_type();
 
   model_args_ = engine_->model_args();
@@ -116,6 +116,7 @@ LLMMaster::LLMMaster(const Options& options)
 LLMMaster::~LLMMaster() {
   stoped_.store(true, std::memory_order_relaxed);
   // wait for the loop thread to finish
+  LOG(INFO) << "LLMMaster stopping...";
   if (loop_thread_.joinable()) {
     loop_thread_.join();
   }
@@ -496,13 +497,22 @@ LLMAssistantMaster::LLMAssistantMaster(const Options& options)
   running_ = true;
 }
 
+LLMAssistantMaster::~LLMAssistantMaster() {
+  // wait for the loop thread to finish
+  if (loop_thread_.joinable()) {
+    loop_thread_.join();
+  }
+}
+
 void LLMAssistantMaster::run() {
   signal(SIGINT, LLMAssistantMaster::handle_signal);
   signal(SIGTERM, LLMAssistantMaster::handle_signal);
 
-  while (running_) {
-    std::this_thread::sleep_for(std::chrono::seconds(5));
-  }
+  loop_thread_ = std::thread([this]() {
+    while (running_) {
+      std::this_thread::sleep_for(std::chrono::seconds(5));
+    }
+  });
 }
 
 }  // namespace xllm

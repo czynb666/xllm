@@ -202,19 +202,17 @@ int run() {
 
   InstanceName::name()->set_name(options.instance_name().value_or(""));
 
+  std::unique_ptr<Master> master;
   // working node
   if (options.node_rank() != 0) {
-    auto master = std::make_unique<LLMAssistantMaster>(options);
-    master->run();
-    return 0;
+    master = std::make_unique<LLMAssistantMaster>(options);
   } else {
     if (FLAGS_random_seed < 0) {
       FLAGS_random_seed = std::random_device{}() % (1 << 30);
     }
+    // master node
+    master = create_master(FLAGS_backend, options);
   }
-
-  // master node
-  auto master = create_master(FLAGS_backend, options);
   master->run();
 
   // supported models

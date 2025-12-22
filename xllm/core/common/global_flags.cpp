@@ -472,7 +472,9 @@ DEFINE_bool(enable_constrained_decoding,
 DEFINE_bool(enable_manual_load_weights,
             false,
             "Whether to enable manual load weights.");
-
+DEFINE_bool(enable_multi_model,
+            false,
+            "Whether to enable multi-model serving.");
 #if defined(USE_NPU)
 DEFINE_string(
     npu_kernel_backend,

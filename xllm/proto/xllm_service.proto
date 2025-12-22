@@ -45,12 +45,7 @@ message MasterInfos {
   string model_id = 1;
   string model_path = 2;
   string master_node_addr = 3;
-  uint64 max_tokens_per_batch = 4;
-  uint64 max_seqs_per_batch = 5;
-  uint64 block_size = 6;
-  int32 dp_size = 7;
-  int32 ep_size = 8;
-  int32 master_status = 9;
+  int32 master_status = 4;
 }
 
 service XllmAPIService {

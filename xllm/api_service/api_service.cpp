@@ -43,6 +43,10 @@ APIService::APIService(Master* master,
                        const std::vector<std::string>& model_names,
                        const std::vector<std::string>& model_versions)
     : master_(master) {
+  if (FLAGS_node_rank != 0) {
+    masters_[model_names[0]] = master;
+    return;
+  }
   if (FLAGS_backend == "llm") {
     auto llm_master = dynamic_cast<LLMMaster*>(master);
     completion_service_impl_ =
@@ -79,7 +83,7 @@ APIService::APIService(Master* master,
     rec_completion_service_impl_ = std::make_unique<RecCompletionServiceImpl>(
         dynamic_cast<RecMaster*>(master), model_names);
   }
-  masters[model_names[0]] = master;
+  masters_[model_names[0]] = master;
   models_service_impl_ =
       ServiceImplFactory<ModelsServiceImpl>::create_service_impl(
           model_names, model_versions);
@@ -105,7 +109,7 @@ void APIService::Completions(::google::protobuf::RpcController* controller,
       const_cast<proto::CompletionRequest*>(request),
       response,
       arena != nullptr);
-  if (FLAGS_backend == "llm" || FLAGS_backend == "vlm") {
+  if (FLAGS_backend == "llm") {
     completion_service_impl_->process_async(call);
   } else if (FLAGS_backend == "rec") {
     rec_completion_service_impl_->process_async(call);
@@ -145,7 +149,7 @@ void APIService::CompletionsHttp(::google::protobuf::RpcController* controller,
 
   std::shared_ptr<Call> call = std::make_shared<CompletionCall>(
       ctrl, done_guard.release(), req_pb, resp_pb, arena != nullptr);
-  if (FLAGS_backend == "llm" || FLAGS_backend == "vlm") {
+  if (FLAGS_backend == "llm") {
     completion_service_impl_->process_async(call);
   } else if (FLAGS_backend == "rec") {
     rec_completion_service_impl_->process_async(call);
@@ -601,11 +605,7 @@ bool APIService::ParseForkMasterRequest(const proto::MasterInfos* request,
   options.model_id() = model_id;
   options.master_node_addr() = request->master_node_addr();
   options.model_path() = request->model_path();
-  options.max_tokens_per_batch() = request->max_tokens_per_batch();
-  options.max_seqs_per_batch() = request->max_seqs_per_batch();
-  options.block_size() = request->block_size();
-  options.dp_size() = request->dp_size();
-  options.ep_size() = request->ep_size();
+  options.master_status() = request->master_status();
 
   return true;
 }
@@ -646,13 +646,18 @@ void APIService::ForkMasterHttp(::google::protobuf::RpcController* controller,
     return;
   }
 
+  if (FLAGS_backend != "llm") {
+    LOG(ERROR) << "fork master only supports llm backend";
+    return;
+  }
+
   Options master_options;
   if (!ParseForkMasterRequest(req_pb, master_options)) {
     LOG(ERROR) << "Failed to parse fork master request";
     return;
   }
 
-  if (masters.find(master_options.model_id()) != masters.end()) {
+  if (masters_.find(master_options.model_id()) != masters_.end()) {
     LOG(INFO) << "Master for model " << master_options.model_id()
               << " already exists";
     return;
@@ -663,7 +668,15 @@ void APIService::ForkMasterHttp(::google::protobuf::RpcController* controller,
     LOG(ERROR) << "Failed to fork master: " << master_options.model_id();
     return;
   }
-  masters[req_pb->model_id()] = master.get();
+
+  masters_[master_options.model_id()] = master.get();
+  if (FLAGS_node_rank == 0) {
+    auto llm_master = dynamic_cast<LLMMaster*>(master.get());
+    completion_service_impl_->add_model_master(master_options.model_id(),
+                                               llm_master);
+    chat_service_impl_->add_model_master(master_options.model_id(), llm_master);
+  }
+  master.release();
 }
 
 void APIService::Sleep(::google::protobuf::RpcController* controller,
@@ -708,12 +721,12 @@ void APIService::SleepHttp(::google::protobuf::RpcController* controller,
     return;
   }
 
-  if (masters.find(req_pb->model_id()) == masters.end()) {
+  if (masters_.find(req_pb->model_id()) == masters_.end()) {
     LOG(ERROR) << "Master for model " << req_pb->model_id() << " not found";
     return;
   }
 
-  auto master = masters[req_pb->model_id()];
+  auto master = masters_[req_pb->model_id()];
   if (master->get_master_status()) {
     LOG(INFO) << "Master for model " << req_pb->model_id()
               << " is already sleeping";
@@ -758,12 +771,12 @@ void APIService::WakeupHttp(::google::protobuf::RpcController* controller,
     LOG(ERROR) << "parse json to proto failed: " << error;
     return;
   }
-  if (masters.find(req_pb->model_id()) == masters.end()) {
+  if (masters_.find(req_pb->model_id()) == masters_.end()) {
     LOG(ERROR) << "Master for model " << req_pb->model_id() << " not found";
     return;
   }
 
-  auto master = masters[req_pb->model_id()];
+  auto master = masters_[req_pb->model_id()];
   if (!master->get_master_status()) {
     LOG(INFO) << "Master for model " << req_pb->model_id()
               << " is already awake";

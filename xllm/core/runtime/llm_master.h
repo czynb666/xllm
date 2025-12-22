@@ -140,12 +140,13 @@ class LLMMaster : public Master {
 class LLMAssistantMaster : public Master {
  public:
   LLMAssistantMaster(const Options& options);
-  ~LLMAssistantMaster() = default;
+  ~LLMAssistantMaster();
   void run() override;
 
   static void handle_signal(int signum) { running_ = false; }
 
  private:
+  std::thread loop_thread_;
   static volatile bool running_;
 };
 

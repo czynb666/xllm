@@ -60,8 +60,8 @@ Worker::~Worker() { delete impl_; }
 
 bool Worker::init_model(const std::string& model_weights_path,
                         int32_t random_seed,
-                        bool sleep_mode) {
-  return impl_->init_model(model_weights_path, random_seed);
+                        int32_t master_status) {
+  return impl_->init_model(model_weights_path, random_seed, master_status);
 }
 
 bool Worker::allocate_kv_cache(
@@ -131,8 +131,9 @@ folly::SemiFuture<folly::Unit> Worker::process_group_test_async() {
 folly::SemiFuture<bool> Worker::init_model_async(
     const std::string& model_weights_path,
     int32_t random_seed,
-    bool sleep_mode) {
-  return impl_->init_model_async(model_weights_path, random_seed, sleep_mode);
+    int32_t master_status) {
+  return impl_->init_model_async(
+      model_weights_path, random_seed, master_status);
 }
 
 folly::SemiFuture<bool> Worker::allocate_kv_cache_async(

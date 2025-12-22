@@ -228,7 +228,7 @@ void WorkerService::InitModel(::google::protobuf::RpcController* controller,
     auto model_weights_path = request->model_weights_path();
     auto random_seed = request->random_seed();
     auto init_future = worker_->init_model_async(
-        model_weights_path, random_seed, request->sleep_mode());
+        model_weights_path, random_seed, request->master_status());
     bool status = std::move(init_future).get();
     if (!status) {
       response->set_ok(false);

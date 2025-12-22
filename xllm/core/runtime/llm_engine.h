@@ -53,7 +53,7 @@ class LLMEngine : public Engine {
 
   const runtime::Options& options() const { return options_; }
 
-  bool init(bool sleep_mode = false) override;
+  bool init(int32_t master_status) override;
 
   void update_last_step_result(std::vector<Batch>& batch) override;
 
@@ -117,7 +117,7 @@ class LLMEngine : public Engine {
   friend class SpeculativeEngine;
   // setup workers internal
   void setup_workers(const runtime::Options& options);
-  bool init_model(bool sleep_mode = false);
+  bool init_model(int32_t master_status);
   Engine::KVCacheCapacity estimate_kv_cache_capacity();
   bool allocate_kv_cache(const Engine::KVCacheCapacity& kv_cache_cap);
   bool allocate_worker_kv_cache(

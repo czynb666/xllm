@@ -34,8 +34,8 @@ namespace xllm {
 
 bool WorkerClient::init_model(const std::string& model_weights_path,
                               int32_t random_seed,
-                              bool sleep_mode) {
-  return worker_->init_model(model_weights_path, random_seed, sleep_mode);
+                              int32_t master_status) {
+  return worker_->init_model(model_weights_path, random_seed, master_status);
 }
 
 bool WorkerClient::allocate_kv_cache(
@@ -124,8 +124,9 @@ folly::SemiFuture<folly::Unit> WorkerClient::process_group_test_async() {
 folly::SemiFuture<bool> WorkerClient::init_model_async(
     const std::string& model_weights_path,
     int32_t random_seed,
-    bool sleep_mode) {
-  return worker_->init_model_async(model_weights_path, random_seed, sleep_mode);
+    int32_t master_status) {
+  return worker_->init_model_async(
+      model_weights_path, random_seed, master_status);
 }
 
 folly::SemiFuture<bool> WorkerClient::allocate_kv_cache_async(

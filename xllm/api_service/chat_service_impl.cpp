@@ -579,9 +579,10 @@ void ChatServiceImpl::process_async_impl(std::shared_ptr<ChatCall> call) {
     call->finish_with_error(StatusCode::UNKNOWN, "Model not supported");
     return;
   }
+  auto master = model_to_master_[model];
 
   // Check if the request is being rate-limited.
-  if (master_->get_rate_limiter()->is_limited()) {
+  if (master->get_rate_limiter()->is_limited()) {
     call->finish_with_error(
         StatusCode::RESOURCE_EXHAUSTED,
         "The number of concurrent requests has reached the limit.");
@@ -652,14 +653,14 @@ void ChatServiceImpl::process_async_impl(std::shared_ptr<ChatCall> call) {
   auto saved_streaming = request_params.streaming;
   auto saved_request_id = request_params.request_id;
 
-  master_->handle_request(
+  master->handle_request(
       std::move(messages),
       std::move(prompt_tokens),
       std::move(request_params),
       call.get(),
       [call,
        model,
-       master = master_,
+       master = master,
        stream = std::move(saved_streaming),
        include_usage = include_usage,
        first_message_sent = std::unordered_set<size_t>(),

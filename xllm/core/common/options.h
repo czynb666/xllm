@@ -194,9 +194,7 @@ class Options {
   // if the model supports multiple version or there are multiple models.
   PROPERTY(int64_t, server_idx) = 0;
 
-  // sleep mode means the model is not active,
-  // it will be activated when the first request comes.
-  PROPERTY(bool, sleep_mode) = false;
+  PROPERTY(int32_t, master_status) = 0;
 };
 
 }  // namespace xllm

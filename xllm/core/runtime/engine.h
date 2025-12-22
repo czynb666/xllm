@@ -32,7 +32,7 @@ class Engine {
 
   virtual bool init() {};
 
-  virtual bool init(bool sleep_mode) {};
+  virtual bool init(int32_t master_status) {};
 
   // execute model with batch input
   virtual ForwardOutput step(std::vector<Batch>& batch) = 0;

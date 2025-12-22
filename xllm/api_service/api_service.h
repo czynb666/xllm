@@ -148,7 +148,7 @@ class APIService : public proto::XllmAPIService {
   bool ParseForkMasterRequest(const proto::MasterInfos* request,
                               Options& options);
   Master* master_;
-  std::unordered_map<std::string, Master*> masters;
+  std::unordered_map<std::string, Master*> masters_;
   std::unique_ptr<CompletionServiceImpl> completion_service_impl_;
   std::unique_ptr<ChatServiceImpl> chat_service_impl_;
   std::unique_ptr<MMChatServiceImpl> mm_chat_service_impl_;

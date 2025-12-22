@@ -170,9 +170,10 @@ void CompletionServiceImpl::process_async_impl(
     call->finish_with_error(StatusCode::UNKNOWN, "Model not supported");
     return;
   }
+  auto master = model_to_master_[model];
 
   // Check if the request is being rate-limited.
-  if (unlikely(master_->get_rate_limiter()->is_limited())) {
+  if (unlikely(master->get_rate_limiter()->is_limited())) {
     call->finish_with_error(
         StatusCode::RESOURCE_EXHAUSTED,
         "The number of concurrent requests has reached the limit.");
@@ -200,14 +201,14 @@ void CompletionServiceImpl::process_async_impl(
   auto saved_streaming = request_params.streaming;
   auto saved_request_id = request_params.request_id;
   // schedule the request
-  master_->handle_request(
+  master->handle_request(
       std::move(rpc_request.prompt()),
       std::move(prompt_tokens),
       std::move(request_params),
       call.get(),
       [call,
        model,
-       master = master_,
+       master = master,
        stream = std::move(saved_streaming),
        include_usage = include_usage,
        request_id = std::move(saved_request_id),

@@ -36,6 +36,11 @@ class CompletionServiceImpl final : public APIServiceImpl<CompletionCall> {
   // brpc call_data needs to use shared_ptr
   void process_async_impl(std::shared_ptr<CompletionCall> call);
 
+  void add_model_master(const std::string& model, LLMMaster* master) {
+    model_to_master_[model] = master;
+    models_.insert(model);
+  }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(CompletionServiceImpl);
   LLMMaster* master_ = nullptr;

@@ -107,8 +107,8 @@ void LLMEngine::process_group_test() {
 #endif
 }
 
-bool LLMEngine::init(bool sleep_mode) {
-  if (!init_model(sleep_mode)) {
+bool LLMEngine::init(int32_t master_status) {
+  if (!init_model(master_status)) {
     LOG(ERROR) << "Failed to init model from: " << options_.model_path();
     return false;
   }
@@ -121,23 +121,19 @@ bool LLMEngine::init(bool sleep_mode) {
   }
 
   kv_cache_cap_ = std::move(estimate_kv_cache_capacity());
-
-  if (!sleep_mode) {
-    if (!(FLAGS_enable_continuous_kvcache
-              ? allocate_continuous_kv_cache(kv_cache_cap_)
-              : allocate_kv_cache(kv_cache_cap_))) {
-      LOG(ERROR) << "Failed to initialize  kv cache";
-      return false;
-    } else {
-      LOG(INFO) << "Successfully initialized kv cache";
-    }
+  if (!(FLAGS_enable_continuous_kvcache
+            ? allocate_continuous_kv_cache(kv_cache_cap_)
+            : allocate_kv_cache(kv_cache_cap_))) {
+    LOG(ERROR) << "Failed to initialize  kv cache";
+    return false;
   } else {
-    LOG(INFO) << "Successfully initialized kv cache in sleep mode";
+    LOG(INFO) << "Successfully initialized kv cache";
   }
+
   return true;
 }
 
-bool LLMEngine::init_model(bool sleep_mode) {
+bool LLMEngine::init_model(int32_t master_status) {
   const std::string& model_path = options_.model_path();
   auto model_loader = ModelLoader::create(model_path);
   LOG(INFO) << "Initializing model from: " << model_path;
@@ -189,7 +185,8 @@ bool LLMEngine::init_model(bool sleep_mode) {
   std::vector<folly::SemiFuture<bool>> futures;
   futures.reserve(worker_clients_num_);
   for (auto& worker : worker_clients_) {
-    futures.push_back(worker->init_model_async(model_path, FLAGS_random_seed));
+    futures.push_back(
+        worker->init_model_async(model_path, FLAGS_random_seed, master_status));
   }
   // wait for all futures to complete
   auto results = folly::collectAll(futures).get();
@@ -243,6 +240,7 @@ Engine::KVCacheCapacity LLMEngine::estimate_kv_cache_capacity() {
 
   Engine::KVCacheCapacity kv_cache_cap;
   kv_cache_cap.cache_size_in_bytes = std::max(cache_size_in_bytes, int64_t(0));
+  kv_cache_cap.cache_size_in_bytes = (int64_t)3 * 1024 * 1024 * 1024;
   CHECK_GT(kv_cache_cap.cache_size_in_bytes, 0)
       << "Available kv cache size must be greater than 0";
   GAUGE_SET(total_kv_cache_size_in_kilobytes,

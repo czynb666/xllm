@@ -376,6 +376,7 @@ std::tuple<int64_t, int64_t> WorkerImpl::estimate_kv_cache_capacity() {
 #elif defined(USE_CUDA) || defined(USE_ILU)
   c10::cuda::CUDACachingAllocator::emptyCache();
 #endif
+  LOG(INFO) << "torch_cache: " << torch_cache;
   const auto available_memory = device_.free_memory();
   const auto total_memory = device_.total_memory();
   DeviceMonitor::get_instance().set_total_memory(device_id, total_memory);
@@ -588,15 +589,16 @@ folly::SemiFuture<folly::Unit> WorkerImpl::process_group_test_async() {
 folly::SemiFuture<bool> WorkerImpl::init_model_async(
     const std::string& model_weights_path,
     int32_t random_seed,
-    bool sleep_mode) {
+    int32_t master_status) {
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();
   threadpool_.schedule([this,
                         model_weights_path,
                         random_seed,
-                        sleep_mode,
+                        master_status,
                         promise = std::move(promise)]() mutable {
-    auto status = this->init_model(model_weights_path, random_seed, sleep_mode);
+    auto status =
+        this->init_model(model_weights_path, random_seed, master_status);
     promise.setValue(status);
   });
 
@@ -657,7 +659,7 @@ bool WorkerImpl::wakeup(const std::vector<std::vector<int64_t>>& kv_cache_shape,
 // initialize model, cache manager. async call
 bool WorkerImpl::init_model(const std::string& model_weights_path,
                             int32_t random_seed,
-                            bool sleep_mode) {
+                            int32_t master_status) {
   // set same random seed for all worker
   device_.set_seed(random_seed);
 
@@ -716,9 +718,9 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
     return false;
   }
 
-  if (!sleep_mode) {
+  if (!master_status) {
     this->load_model(std::move(model_loader));
-  } else {
+  } else if (master_status == LIGHT_SLEEP) {
     this->lazy_load_model(std::move(model_loader));
   }
 
