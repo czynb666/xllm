@@ -99,9 +99,9 @@ class DisaggPDScheduler : public ContinuousScheduler {
  protected:
   // Pre-execute prefill requests of different lengths at startup and obtain the
   // corresponding TTFT for calculating the estimated TTFT of requests.
-  void profile_ttft();
+  void profile_ttft() override;
 
-  void profile_tpot();
+  void profile_tpot() override;
 
   // check remote instance info, if not exist, get from master service
   bool check_remote_instance_info(const std::string& instance_name);

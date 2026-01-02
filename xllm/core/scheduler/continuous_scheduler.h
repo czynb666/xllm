@@ -177,6 +177,10 @@ class ContinuousScheduler : public Scheduler {
   virtual void get_latency_metrics(std::vector<int64_t>& ttft,
                                    std::vector<int64_t>& tbt) {}
 
+  virtual void profile_ttft();
+  
+  virtual void profile_tpot();
+
   const InstanceInfo& get_instance_info() { return instance_info_; }
 
   std::vector<int> last_batch_lengths_;

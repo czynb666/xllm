@@ -203,10 +203,15 @@ struct InstanceInfo {
   std::vector<int64_t> k_cache_ids;
   std::vector<int64_t> v_cache_ids;
   int32_t dp_size;
+
+  std::string model_id = "";
+
   // ttft profiling data
   std::vector<std::pair<int32_t, double>> ttft_profiling_data;
   // tpot profiling data
   std::vector<std::tuple<int32_t, int32_t, double>> tpot_profiling_data;
+
+  bool enable_disagg_pd = false;
 
   nlohmann::json serialize_to_json() const {
     nlohmann::json json_val;
@@ -229,8 +234,17 @@ struct InstanceInfo {
     json_val["k_cache_ids"] = k_cache_ids;
     json_val["v_cache_ids"] = v_cache_ids;
     json_val["dp_size"] = dp_size;
-    json_val["ttft_profiling_data"] = ttft_profiling_data;
-    json_val["tpot_profiling_data"] = tpot_profiling_data;
+
+    nlohmann::json ttft_json;
+    ttft_json["model_id"] = ttft_profiling_data;
+    json_val["ttft_profiling_data"] = ttft_json;
+
+    nlohmann::json tpot_json;
+    tpot_json["model_id"] = tpot_profiling_data;
+    json_val["tpot_profiling_data"] = tpot_json;
+
+    json_val["enable_disagg_pd"] = enable_disagg_pd;
+
     return json_val;
   }
 };

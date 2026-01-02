@@ -73,6 +73,8 @@ class LLMMaster : public Master {
   // this is a blocking call
   void generate();
 
+  Scheduler* scheduler() const { return scheduler_.get(); }
+
   void get_cache_info(std::vector<uint64_t>& cluster_ids,
                       std::vector<std::string>& addrs,
                       std::vector<int64_t>& k_cache_ids,

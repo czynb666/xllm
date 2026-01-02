@@ -32,9 +32,11 @@ limitations under the License.
 #include "core/common/options.h"
 #include "core/runtime/vlm_master.h"
 #include "core/util/closure_guard.h"
+#include "core/scheduler/continuous_scheduler.h"
 #include "embedding.pb.h"
 #include "image_generation.pb.h"
 #include "models.pb.h"
+#include "runtime/xservice_client.h"
 #include "service_impl_factory.h"
 #include "xllm_metrics.h"
 namespace xllm {
@@ -676,6 +678,19 @@ void APIService::ForkMasterHttp(::google::protobuf::RpcController* controller,
                                                llm_master);
     chat_service_impl_->add_model_master(master_options.model_id(), llm_master);
   }
+
+  auto llm_master = dynamic_cast<LLMMaster*>(master.get());
+  if (llm_master) {
+    auto scheduler =
+        dynamic_cast<ContinuousScheduler*>(llm_master->scheduler());
+    if (scheduler) {
+      scheduler->profile_ttft();
+      scheduler->profile_tpot();
+      XServiceClient::get_instance()->register_instance(
+          scheduler->get_instance_info());
+    }
+  }
+  
   master.release();
 }
 

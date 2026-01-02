@@ -263,6 +263,7 @@ bool WorkerImpl::allocate_device_kv_cache_with_transfer(
     kv_cache_transfer_->register_kv_cache(kv_caches_, kv_cache_shape, dtype_);
   }
 #endif
+  return true;
 }
 
 #if defined(USE_NPU)

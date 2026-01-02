@@ -88,6 +88,9 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
   instance_info_.type = options_.instance_role().value().to_string();
   instance_info_.dp_size = options.dp_size();
 
+  instance_info_.model_id = engine_->model_args().model_type();
+  instance_info_.enable_disagg_pd = options.enable_disagg_pd();
+
   if (options_.enable_schedule_overlap()) {
     min_speculative_tokens_required_ = options_.num_speculative_tokens() * 2;
   } else {
@@ -1204,4 +1207,74 @@ void ContinuousScheduler::step_with_pd_ooc(std::vector<Batch>& batch) {
   VLOG(1) << "PERF - " << ss.str() << " - " << std::fixed
           << std::setprecision(3) << duration_ms << " ms";
 }
+
+
+void ContinuousScheduler::profile_ttft() {
+  LOG(INFO) << "Start profiling TTFT.";
+  // get the maximum prefill token length
+  auto& model_args = engine_->model_args();
+  int32_t max_context_len = model_args.max_position_embeddings();
+
+  // ContinuousScheduler means enable_chunked_prefill == false
+  max_context_len = std::min(max_context_len, options_.max_tokens_per_batch());
+
+  int32_t num_valid_blocks = kv_cache_manager_->num_blocks() - 1;// block 0 reserved for padding
+  int32_t block_size = kv_cache_manager_->block_size();
+  max_context_len = std::min(max_context_len, num_valid_blocks * block_size);
+
+  // warm up
+  // TODO: add warmup profiling, for the first request after model wakeup
+  profile_manager_->run_request(max_context_len, 0);
+
+  // get TTFT starting from max_context_len
+  for (int32_t token_length = max_context_len; token_length > 1;
+       token_length *= 0.9) {
+    double latency = profile_manager_->run_request(token_length, 0);
+    instance_info_.ttft_profiling_data.emplace_back(
+        std::make_pair(token_length, latency));
+  }
+}
+
+void ContinuousScheduler::profile_tpot() {
+  LOG(INFO) << "Start profiling TPOT.";
+  // get the maximum token length
+  auto& model_args = engine_->model_args();
+  int32_t max_context_len = model_args.max_position_embeddings();
+  max_context_len = std::min(max_context_len, options_.max_tokens_per_batch());// ContinuousScheduler means enable_chunked_prefill == false
+
+  int32_t num_valid_blocks = kv_cache_manager_->num_blocks() - 1;// -5 for some weird bugs
+  int32_t block_size = kv_cache_manager_->block_size();
+  max_context_len = std::min(max_context_len, num_valid_blocks * block_size);
+
+  int32_t max_seqs_per_batch = options_.max_seqs_per_batch();
+  int32_t warm_up_blocks = max_context_len / block_size;
+  int32_t max_batch_size = num_valid_blocks / warm_up_blocks;
+
+  // warm up
+  // TODO: add warmup profiling, for the first request after model wakeup
+  profile_manager_->run_request(
+      max_context_len, max_context_len - 1, max_batch_size);
+
+  // get TPOT starting from max_context_len, dividing the token length by 2 in
+  // each loop iteration. Skip small token lengths to speed up profiling.
+  for (int32_t token_length = max_context_len; token_length > 64;
+       token_length >>= 1) {
+    max_batch_size = num_valid_blocks / ((token_length + block_size - 1) / block_size + 1);// somehow this works. this might mean that some sequences would gain 1 extra block, even if the last block is not full.
+    int32_t current_max_batch_size = max_batch_size > max_seqs_per_batch
+                                         ? max_seqs_per_batch
+                                         : max_batch_size;
+    for (int32_t batch_size = current_max_batch_size; batch_size > 0;
+         batch_size *= 0.9) {
+
+      LOG(INFO) << "Profiling TPOT for token_length=" << token_length
+                << ", batch_size=" << batch_size;
+
+      double latency = profile_manager_->profile_decode_step_time(
+          token_length, batch_size, /*min_context_len=*/64, max_context_len);
+      instance_info_.tpot_profiling_data.emplace_back(
+          token_length, batch_size, latency);
+    }
+  }
+}
+
 }  // namespace xllm
